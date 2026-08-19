@@ -5,9 +5,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
+from app.models.action_item import ActionItem
+from app.models.key_decision import KeyDecision
 from app.models.meeting import STATUS_PENDING_CONFIRMATION, STATUS_UPLOADED, Meeting
+from app.models.summary import Summary
 from app.models.transcript import Transcript
 from app.schemas.meeting import MeetingRead
+from app.schemas.summary import ActionItemRead, SummaryRead
 from app.schemas.transcript import TranscriptRead
 from app.services import chunking_service
 from app.services.processing_service import process_meeting
@@ -95,3 +99,30 @@ def get_transcript(meeting_id: str, db: Session = Depends(get_db)) -> Transcript
     if transcript is None:
         raise HTTPException(status_code=404, detail="Transcript not available yet.")
     return transcript
+
+
+@router.get("/{meeting_id}/summary", response_model=SummaryRead)
+def get_summary(meeting_id: str, db: Session = Depends(get_db)) -> SummaryRead:
+    summary = db.execute(
+        select(Summary).where(Summary.meeting_id == meeting_id)
+    ).scalar_one_or_none()
+    if summary is None:
+        raise HTTPException(status_code=404, detail="Summary not available yet.")
+
+    decisions = db.execute(
+        select(KeyDecision).where(KeyDecision.summary_id == summary.id).order_by(KeyDecision.order_index)
+    ).scalars().all()
+    action_items = db.execute(
+        select(ActionItem).where(ActionItem.summary_id == summary.id).order_by(ActionItem.order_index)
+    ).scalars().all()
+
+    return SummaryRead(
+        id=summary.id,
+        meeting_id=summary.meeting_id,
+        overview=summary.overview,
+        model_used=summary.model_used,
+        prompt_version=summary.prompt_version,
+        key_decisions=[d.decision_text for d in decisions],
+        action_items=[ActionItemRead.model_validate(ai) for ai in action_items],
+        created_at=summary.created_at,
+    )

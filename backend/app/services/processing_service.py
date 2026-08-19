@@ -6,9 +6,19 @@ from pathlib import Path
 
 from app.core.config import settings
 from app.db.session import SessionLocal
-from app.models.meeting import STATUS_FAILED, STATUS_TRANSCRIBED, STATUS_TRANSCRIBING, Meeting
+from app.models.action_item import ActionItem
+from app.models.key_decision import KeyDecision
+from app.models.meeting import (
+    STATUS_COMPLETED,
+    STATUS_FAILED,
+    STATUS_SUMMARIZING,
+    STATUS_TRANSCRIBED,
+    STATUS_TRANSCRIBING,
+    Meeting,
+)
+from app.models.summary import Summary
 from app.models.transcript import Transcript
-from app.services import asr_service, chunking_service
+from app.services import asr_service, chunking_service, llm_service
 
 CHUNK_CONCURRENCY = 3
 
@@ -16,6 +26,8 @@ CHUNK_CONCURRENCY = 3
 def process_meeting(meeting_id: str) -> None:
     """Entry point for FastAPI's BackgroundTasks — owns its own DB session
     since the request-scoped one is already closed by the time this runs.
+    Runs transcription then summarization as one pipeline; either stage's
+    failure lands the meeting in STATUS_FAILED with a descriptive message.
     """
     db = SessionLocal()
     try:
@@ -47,7 +59,48 @@ def process_meeting(meeting_id: str) -> None:
             db.rollback()
             meeting = db.get(Meeting, meeting_id)
             meeting.status = STATUS_FAILED
-            meeting.error_message = str(exc)[:2000]
+            meeting.error_message = f"Transcription failed: {str(exc)[:1900]}"
+            db.commit()
+            return
+
+        try:
+            meeting.status = STATUS_SUMMARIZING
+            db.commit()
+
+            summary_out, prompt_version = llm_service.summarize_transcript(
+                text, two_pass=meeting.requires_chunking
+            )
+
+            summary = Summary(
+                meeting_id=meeting.id,
+                overview=summary_out.overview,
+                model_used=settings.llm_model,
+                prompt_version=prompt_version,
+            )
+            db.add(summary)
+            db.flush()  # assigns summary.id for the FK rows below
+
+            for i, decision_text in enumerate(summary_out.key_decisions):
+                db.add(KeyDecision(summary_id=summary.id, decision_text=decision_text, order_index=i))
+
+            for i, item in enumerate(summary_out.action_items):
+                db.add(ActionItem(
+                    summary_id=summary.id,
+                    description=item.description,
+                    owner=item.owner,
+                    due_date=item.due_date,
+                    priority=item.priority,
+                    order_index=i,
+                ))
+
+            meeting.status = STATUS_COMPLETED
+            meeting.error_message = None
+            db.commit()
+        except Exception as exc:
+            db.rollback()
+            meeting = db.get(Meeting, meeting_id)
+            meeting.status = STATUS_FAILED
+            meeting.error_message = f"Summarization failed: {str(exc)[:1900]}"
             db.commit()
     finally:
         db.close()

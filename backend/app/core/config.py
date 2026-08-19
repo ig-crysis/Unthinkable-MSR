@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     chunk_target_minutes: int = 12
     chunk_max_minutes: int = 15
     asr_model: str = "whisper-large-v3"
+    llm_model: str = "openai/gpt-oss-120b"
 
 
 settings = Settings()

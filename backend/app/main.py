@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import meetings
+from app.api.routes import action_items, meetings
 from app.db.session import Base, engine
 
 Base.metadata.create_all(bind=engine)
@@ -16,6 +16,7 @@ app.add_middleware(
 )
 
 app.include_router(meetings.router)
+app.include_router(action_items.router)
 
 
 @app.get("/api/health")

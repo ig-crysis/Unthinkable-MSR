@@ -13,6 +13,8 @@ STATUS_UPLOADED = "uploaded"
 STATUS_PENDING_CONFIRMATION = "pending_confirmation"
 STATUS_TRANSCRIBING = "transcribing"
 STATUS_TRANSCRIBED = "transcribed"
+STATUS_SUMMARIZING = "summarizing"
+STATUS_COMPLETED = "completed"
 STATUS_FAILED = "failed"
 
 
