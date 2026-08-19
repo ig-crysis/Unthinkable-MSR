@@ -17,6 +17,7 @@ backend/uploads/
 node_modules/
 dist/
 .vite/
+*.tsbuildinfo
 
 # Editors
 .vscode/

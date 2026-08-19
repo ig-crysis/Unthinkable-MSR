@@ -4,14 +4,14 @@ Transcribes meeting audio and generates action-oriented summaries — a transcri
 
 Built on Groq's free, low-latency hosting of Whisper (ASR) and an open-weight Llama-class model (summarization), so the whole pipeline runs at $0 cost.
 
-> **Status:** Phase 3 (LLM summarization) complete. Backend is fully functional end-to-end; frontend lands in Phase 4. This README grows with each phase.
+> **Status:** Phase 4 (frontend) complete. Full app is functional end-to-end — upload, transcribe, summarize, and review, all from the browser. This README grows with each phase.
 
 ## Stack
 
 - **Backend:** FastAPI + SQLAlchemy + SQLite
 - **ASR:** Groq — `whisper-large-v3`
 - **LLM:** Groq — `openai/gpt-oss-120b` (structured JSON output)
-- **Frontend:** React + Vite + TypeScript (added in a later phase)
+- **Frontend:** React + Vite + TypeScript, plain CSS (no UI framework — see *Project structure* in the build plan for why)
 
 ## Backend setup
 
@@ -40,6 +40,17 @@ uvicorn app.main:app --reload --app-dir .
 
 Docs at http://127.0.0.1:8000/docs. `GET /api/health` should return `{"status": "ok"}`.
 
+## Frontend setup
+
+```bash
+cd frontend
+npm install
+copy .env.example .env        # Windows: copy, macOS/Linux: cp
+npm run dev
+```
+
+Opens at http://localhost:5173. Expects the backend running at `VITE_API_BASE_URL` (default `http://127.0.0.1:8000`) — start the backend first.
+
 ## How it works
 
 1. Upload an audio file. Short/small ones start transcribing immediately.
@@ -59,4 +70,13 @@ Docs at http://127.0.0.1:8000/docs. `GET /api/health` should return `{"status": 
 | `GET /api/meetings/{id}/summary` | Overview, key decisions, and action items. 404 until summarization finishes. |
 | `PATCH /api/action-items/{id}` | Toggle `open`/`done`, edit `owner` or `due_date`. |
 
-`POST /api/meetings/{id}/reprocess` and `DELETE /api/meetings/{id}` land in a later phase. Frontend lands in Phase 4.
+`POST /api/meetings/{id}/reprocess` and `DELETE /api/meetings/{id}` land in a later phase.
+
+## Frontend
+
+Two views, no router (kept out to minimize dependencies for a two-screen app):
+
+- **Dashboard** — drag-and-drop upload, meeting list with live-polling status pills
+- **Meeting detail** — the confirmation prompt for long/large meetings, a processing spinner, then the summary (overview, key decisions, a checkable action-item list) and full transcript once ready
+
+Polling stops automatically once nothing is actively processing.
