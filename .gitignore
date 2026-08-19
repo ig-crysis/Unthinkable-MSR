@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Secrets
+.env
+
+# SQLite database
+*.db
+
+# Uploaded audio
+backend/uploads/
+
+# Node / frontend
+node_modules/
+dist/
+.vite/
+
+# Editors
+.vscode/
+.idea/
