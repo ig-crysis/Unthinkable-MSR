@@ -223,6 +223,27 @@ h2.section-title {
   color: var(--ink);
 }
 
+.btn-danger {
+  background: var(--danger);
+  color: #fff;
+}
+.btn-danger:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.text-link-danger {
+  background: none;
+  border: none;
+  color: var(--ink-faint);
+  font-size: 13px;
+  font-family: var(--font-body);
+  cursor: pointer;
+  padding: 0;
+}
+.text-link-danger:hover {
+  color: var(--danger);
+}
+
 .error-text {
   color: var(--danger);
   font-size: 13.5px;
@@ -354,6 +375,11 @@ h2.section-title {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.confirm-banner.danger {
+  border-color: var(--danger);
+  background: var(--danger-soft);
 }
 
 .confirm-banner p {

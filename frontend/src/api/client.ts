@@ -16,6 +16,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const body = await response.json().catch(() => ({}));
     throw new ApiError(response.status, body.detail ?? response.statusText);
   }
+  if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
 
@@ -53,6 +54,10 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
     });
+  },
+
+  deleteMeeting(id: string): Promise<void> {
+    return request<void>(`/api/meetings/${id}`, { method: "DELETE" });
   },
 };
 

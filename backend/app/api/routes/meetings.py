@@ -15,7 +15,7 @@ from app.schemas.summary import ActionItemRead, SummaryRead
 from app.schemas.transcript import TranscriptRead
 from app.services import chunking_service
 from app.services.processing_service import process_meeting
-from app.services.storage_service import UploadTooLarge, is_allowed_audio, save_upload
+from app.services.storage_service import UploadTooLarge, delete_file, is_allowed_audio, save_upload
 
 router = APIRouter(prefix="/api/meetings", tags=["meetings"])
 
@@ -89,6 +89,25 @@ def get_meeting(meeting_id: str, db: Session = Depends(get_db)) -> Meeting:
     if meeting is None:
         raise HTTPException(status_code=404, detail="Meeting not found.")
     return meeting
+
+
+@router.delete("/{meeting_id}", status_code=204)
+def delete_meeting(meeting_id: str, db: Session = Depends(get_db)) -> None:
+    meeting = db.get(Meeting, meeting_id)
+    if meeting is None:
+        raise HTTPException(status_code=404, detail="Meeting not found.")
+
+    summary = db.execute(select(Summary).where(Summary.meeting_id == meeting_id)).scalar_one_or_none()
+    if summary is not None:
+        db.execute(KeyDecision.__table__.delete().where(KeyDecision.summary_id == summary.id))
+        db.execute(ActionItem.__table__.delete().where(ActionItem.summary_id == summary.id))
+        db.delete(summary)
+
+    db.execute(Transcript.__table__.delete().where(Transcript.meeting_id == meeting_id))
+    db.delete(meeting)
+    db.commit()
+
+    delete_file(meeting.audio_path)
 
 
 @router.get("/{meeting_id}/transcript", response_model=TranscriptRead)

@@ -40,3 +40,8 @@ def save_upload(file: UploadFile) -> str:
             out.write(chunk)
 
     return str(dest)
+
+
+def delete_file(path: str) -> None:
+    """Best-effort delete — a missing file is not an error here."""
+    Path(path).unlink(missing_ok=True)

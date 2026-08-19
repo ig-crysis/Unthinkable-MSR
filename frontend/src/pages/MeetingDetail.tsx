@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "../api/client";
+import { api, ApiError } from "../api/client";
 import StatusPill from "../components/StatusPill";
 import type { ActionItem, Meeting, Summary, Transcript } from "../types";
 import { formatDuration, formatSize } from "../utils/format";
@@ -13,11 +13,27 @@ export default function MeetingDetail({ meetingId, onBack }: { meetingId: string
   const [transcript, setTranscript] = useState<Transcript | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const refreshMeeting = useCallback(async () => {
-    const m = await api.getMeeting(meetingId);
-    setMeeting(m);
+    try {
+      const m = await api.getMeeting(meetingId);
+      setMeeting(m);
+      setLoadError(null);
+    } catch (err) {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      setLoadError(
+        err instanceof ApiError && err.status === 404
+          ? "This meeting no longer exists — it may have been deleted."
+          : "Couldn't reach the backend — is it still running?",
+      );
+    }
   }, [meetingId]);
 
   useEffect(() => {
@@ -60,6 +76,16 @@ export default function MeetingDetail({ meetingId, onBack }: { meetingId: string
     }
   }
 
+  async function handleDelete() {
+    setDeleting(true);
+    try {
+      await api.deleteMeeting(meetingId);
+      onBack();
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   async function toggleActionItem(item: ActionItem) {
     const nextStatus = item.status === "done" ? "open" : "done";
     const updated = await api.updateActionItem(item.id, { status: nextStatus });
@@ -68,15 +94,35 @@ export default function MeetingDetail({ meetingId, onBack }: { meetingId: string
     );
   }
 
+  if (loadError && !meeting) {
+    return (
+      <>
+        <button className="back-link" onClick={onBack}>
+          ← All meetings
+        </button>
+        <div className="panel">
+          <div className="error-text">{loadError}</div>
+        </div>
+      </>
+    );
+  }
+
   if (!meeting) return <div className="panel">Loading…</div>;
 
   return (
     <>
-      <button className="back-link" onClick={onBack}>
-        ← All meetings
-      </button>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <button className="back-link" style={{ marginBottom: 0 }} onClick={onBack}>
+          ← All meetings
+        </button>
+        {!confirmingDelete && (
+          <button className="text-link-danger" onClick={() => setConfirmingDelete(true)}>
+            Delete meeting
+          </button>
+        )}
+      </div>
 
-      <div className="detail-header">
+      <div className="detail-header" style={{ marginTop: 18 }}>
         <div>
           <h1>{meeting.title}</h1>
           <div className="detail-meta">
@@ -87,6 +133,20 @@ export default function MeetingDetail({ meetingId, onBack }: { meetingId: string
         </div>
         <StatusPill status={meeting.status} />
       </div>
+
+      {confirmingDelete && (
+        <div className="confirm-banner danger">
+          <p>Delete "{meeting.title}"? This removes the audio file, transcript, and summary permanently.</p>
+          <div className="confirm-actions">
+            <button className="btn btn-danger" onClick={handleDelete} disabled={deleting}>
+              {deleting ? "Deleting…" : "Delete permanently"}
+            </button>
+            <button className="btn btn-ghost" onClick={() => setConfirmingDelete(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {meeting.status === "pending_confirmation" && (
         <div className="confirm-banner">
