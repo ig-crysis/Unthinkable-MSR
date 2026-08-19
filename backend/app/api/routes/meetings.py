@@ -1,10 +1,16 @@
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from pathlib import Path
+
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.models.meeting import Meeting
+from app.models.meeting import STATUS_PENDING_CONFIRMATION, STATUS_UPLOADED, Meeting
+from app.models.transcript import Transcript
 from app.schemas.meeting import MeetingRead
+from app.schemas.transcript import TranscriptRead
+from app.services import chunking_service
+from app.services.processing_service import process_meeting
 from app.services.storage_service import UploadTooLarge, is_allowed_audio, save_upload
 
 router = APIRouter(prefix="/api/meetings", tags=["meetings"])
@@ -12,6 +18,7 @@ router = APIRouter(prefix="/api/meetings", tags=["meetings"])
 
 @router.post("", response_model=MeetingRead, status_code=201)
 def upload_meeting(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     title: str = Form(default=""),
     db: Session = Depends(get_db),
@@ -24,14 +31,46 @@ def upload_meeting(
     except UploadTooLarge as exc:
         raise HTTPException(status_code=413, detail=str(exc)) from exc
 
+    file_size_bytes = Path(audio_path).stat().st_size
+    duration_seconds = chunking_service.get_duration_seconds(audio_path)
+    requires_chunking = chunking_service.needs_chunking(file_size_bytes, duration_seconds)
+
     meeting = Meeting(
         title=title.strip() or file.filename,
         filename=file.filename,
         audio_path=audio_path,
+        file_size_bytes=file_size_bytes,
+        duration_seconds=duration_seconds,
+        requires_chunking=requires_chunking,
+        status=STATUS_PENDING_CONFIRMATION if requires_chunking else STATUS_UPLOADED,
     )
     db.add(meeting)
     db.commit()
     db.refresh(meeting)
+
+    if not requires_chunking:
+        background_tasks.add_task(process_meeting, meeting.id)
+
+    return meeting
+
+
+@router.post("/{meeting_id}/confirm-processing", response_model=MeetingRead)
+def confirm_processing(
+    meeting_id: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> Meeting:
+    meeting = db.get(Meeting, meeting_id)
+    if meeting is None:
+        raise HTTPException(status_code=404, detail="Meeting not found.")
+    if meeting.status != STATUS_PENDING_CONFIRMATION:
+        raise HTTPException(status_code=409, detail=f"Meeting is not awaiting confirmation (status: {meeting.status}).")
+
+    meeting.status = STATUS_UPLOADED
+    db.commit()
+    db.refresh(meeting)
+
+    background_tasks.add_task(process_meeting, meeting.id)
     return meeting
 
 
@@ -46,3 +85,13 @@ def get_meeting(meeting_id: str, db: Session = Depends(get_db)) -> Meeting:
     if meeting is None:
         raise HTTPException(status_code=404, detail="Meeting not found.")
     return meeting
+
+
+@router.get("/{meeting_id}/transcript", response_model=TranscriptRead)
+def get_transcript(meeting_id: str, db: Session = Depends(get_db)) -> Transcript:
+    transcript = db.execute(
+        select(Transcript).where(Transcript.meeting_id == meeting_id)
+    ).scalar_one_or_none()
+    if transcript is None:
+        raise HTTPException(status_code=404, detail="Transcript not available yet.")
+    return transcript
