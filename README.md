@@ -148,6 +148,3 @@ Live on a single Azure VM (`Standard_B1s`, Ubuntu 22.04, Central India — see `
 
 To push a new build after committing changes: `bash deploy/redeploy.sh` from the repo root — rebuilds the frontend, packages the backend, and deploys both with a brief service restart.
 
-## Demo video
-
-_[Add link here after recording.]_
