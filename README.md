@@ -1,4 +1,18 @@
-# Unthink MeetIQ
+<h1 align="center">Unthink MeetIQ</h1>
+
+<p align="center">
+  <img src="imgs/demo.gif" alt="Unthink MeetIQ demo" width="800">
+</p>
+
+<p align="center">
+  <img src="imgs/img1.png" alt="Upload a meeting" width="800">
+</p>
+<p align="center">
+  <img src="imgs/img-2-features.png" alt="Features page" width="800">
+</p>
+<p align="center">
+  <img src="imgs/img-3-savedsummarypage.png" alt="Saved meeting summary" width="800">
+</p>
 
 **Live:** https://unthink-meetiq.centralindia.cloudapp.azure.com
 
