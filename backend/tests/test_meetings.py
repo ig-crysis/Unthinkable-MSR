@@ -24,7 +24,7 @@ def test_get_nonexistent_meeting_returns_404(client):
 def test_upload_short_meeting_auto_completes(client, monkeypatch):
     monkeypatch.setattr(
         asr_service, "transcribe_file",
-        lambda path, max_attempts=3: {"text": "Sam: I'll send the doc by Friday.", "language": "English"},
+        lambda path, max_attempts=3: {"text": "Sam: I'll send the doc by Friday.", "language": "English", "segments": []},
     )
     monkeypatch.setattr(
         llm_service, "summarize_transcript",
@@ -77,7 +77,7 @@ def test_summary_404_before_processing_completes(client, monkeypatch):
     # just check the 404 contract directly against a meeting with no summary.
     monkeypatch.setattr(
         asr_service, "transcribe_file",
-        lambda path, max_attempts=3: {"text": "hello", "language": "English"},
+        lambda path, max_attempts=3: {"text": "hello", "language": "English", "segments": []},
     )
 
     def boom(text, two_pass):
@@ -97,7 +97,7 @@ def test_summary_404_before_processing_completes(client, monkeypatch):
 def test_confirm_processing_conflict_when_not_pending(client, monkeypatch):
     monkeypatch.setattr(
         asr_service, "transcribe_file",
-        lambda path, max_attempts=3: {"text": "hello", "language": "English"},
+        lambda path, max_attempts=3: {"text": "hello", "language": "English", "segments": []},
     )
     monkeypatch.setattr(
         llm_service, "summarize_transcript",
@@ -119,7 +119,7 @@ def test_confirm_processing_404_for_missing_meeting(client):
 def test_action_item_patch_rejects_invalid_status(client, monkeypatch):
     monkeypatch.setattr(
         asr_service, "transcribe_file",
-        lambda path, max_attempts=3: {"text": "hello", "language": "English"},
+        lambda path, max_attempts=3: {"text": "hello", "language": "English", "segments": []},
     )
     monkeypatch.setattr(
         llm_service, "summarize_transcript",
@@ -149,7 +149,7 @@ def test_action_item_patch_404_for_missing_item(client):
 def test_delete_meeting_removes_it(client, monkeypatch):
     monkeypatch.setattr(
         asr_service, "transcribe_file",
-        lambda path, max_attempts=3: {"text": "hello", "language": "English"},
+        lambda path, max_attempts=3: {"text": "hello", "language": "English", "segments": []},
     )
     monkeypatch.setattr(
         llm_service, "summarize_transcript",

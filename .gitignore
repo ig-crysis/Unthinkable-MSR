@@ -26,3 +26,6 @@ dist/
 
 # Assignment reference docs (not part of the project)
 /*.pdf
+
+# Deploy tooling working files
+deploy/*.tar.gz

@@ -1,6 +1,8 @@
 """Background pipeline: transcribe a meeting (direct or chunked map-reduce)."""
 
+import logging
 import shutil
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -20,6 +22,8 @@ from app.models.summary import Summary
 from app.models.transcript import Transcript
 from app.models.transcript_segment import TranscriptSegment
 from app.services import asr_service, chunking_service, llm_service
+
+logger = logging.getLogger(__name__)
 
 CHUNK_CONCURRENCY = 3
 
@@ -41,11 +45,13 @@ def process_meeting(meeting_id: str) -> None:
 
         turns: list[dict] = []
         try:
+            stage_start = time.perf_counter()
             if meeting.requires_chunking:
                 text, language, chunk_count, segments = _transcribe_chunked(meeting)
             else:
                 result = asr_service.transcribe_file(meeting.audio_path)
                 text, language, chunk_count, segments = result["text"], result["language"], 1, result["segments"]
+            logger.info("meeting %s: ASR took %.1fs", meeting_id, time.perf_counter() - stage_start)
 
             transcript = Transcript(
                 meeting_id=meeting.id,
@@ -58,7 +64,12 @@ def process_meeting(meeting_id: str) -> None:
             db.flush()  # assigns transcript.id for the segment rows below
 
             try:
+                stage_start = time.perf_counter()
                 turns = llm_service.diarize_segments(segments)
+                logger.info(
+                    "meeting %s: diarization took %.1fs (%d segments -> %d turns)",
+                    meeting_id, time.perf_counter() - stage_start, len(segments), len(turns),
+                )
                 for i, turn in enumerate(turns):
                     db.add(TranscriptSegment(
                         transcript_id=transcript.id,
@@ -94,9 +105,11 @@ def process_meeting(meeting_id: str) -> None:
             # diarization didn't produce anything usable.
             summary_input = "\n".join(f"{t['speaker']}: {t['text']}" for t in turns) if turns else text
 
+            stage_start = time.perf_counter()
             summary_out, prompt_version = llm_service.summarize_transcript(
                 summary_input, two_pass=meeting.requires_chunking
             )
+            logger.info("meeting %s: summarization took %.1fs", meeting_id, time.perf_counter() - stage_start)
 
             summary = Summary(
                 meeting_id=meeting.id,

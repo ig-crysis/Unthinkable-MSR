@@ -4,6 +4,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPExcepti
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.api.deps import get_owner_id
 from app.db.session import get_db
 from app.models.action_item import ActionItem
 from app.models.key_decision import KeyDecision
@@ -21,12 +22,22 @@ from app.services.storage_service import UploadTooLarge, delete_file, is_allowed
 router = APIRouter(prefix="/api/meetings", tags=["meetings"])
 
 
+def _get_owned_meeting(db: Session, meeting_id: str, owner_id: str) -> Meeting:
+    meeting = db.execute(
+        select(Meeting).where(Meeting.id == meeting_id, Meeting.owner_id == owner_id)
+    ).scalar_one_or_none()
+    if meeting is None:
+        raise HTTPException(status_code=404, detail="Meeting not found.")
+    return meeting
+
+
 @router.post("", response_model=MeetingRead, status_code=201)
 def upload_meeting(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     title: str = Form(default=""),
     db: Session = Depends(get_db),
+    owner_id: str = Depends(get_owner_id),
 ) -> Meeting:
     if not file.filename or not is_allowed_audio(file.filename):
         raise HTTPException(status_code=400, detail="Unsupported audio file type.")
@@ -41,6 +52,7 @@ def upload_meeting(
     requires_chunking = chunking_service.needs_chunking(file_size_bytes, duration_seconds)
 
     meeting = Meeting(
+        owner_id=owner_id,
         title=title.strip() or file.filename,
         filename=file.filename,
         audio_path=audio_path,
@@ -64,10 +76,9 @@ def confirm_processing(
     meeting_id: str,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
+    owner_id: str = Depends(get_owner_id),
 ) -> Meeting:
-    meeting = db.get(Meeting, meeting_id)
-    if meeting is None:
-        raise HTTPException(status_code=404, detail="Meeting not found.")
+    meeting = _get_owned_meeting(db, meeting_id, owner_id)
     if meeting.status != STATUS_PENDING_CONFIRMATION:
         raise HTTPException(status_code=409, detail=f"Meeting is not awaiting confirmation (status: {meeting.status}).")
 
@@ -80,23 +91,22 @@ def confirm_processing(
 
 
 @router.get("", response_model=list[MeetingRead])
-def list_meetings(db: Session = Depends(get_db)) -> list[Meeting]:
-    return list(db.execute(select(Meeting).order_by(Meeting.created_at.desc())).scalars().all())
+def list_meetings(db: Session = Depends(get_db), owner_id: str = Depends(get_owner_id)) -> list[Meeting]:
+    return list(
+        db.execute(
+            select(Meeting).where(Meeting.owner_id == owner_id).order_by(Meeting.created_at.desc())
+        ).scalars().all()
+    )
 
 
 @router.get("/{meeting_id}", response_model=MeetingRead)
-def get_meeting(meeting_id: str, db: Session = Depends(get_db)) -> Meeting:
-    meeting = db.get(Meeting, meeting_id)
-    if meeting is None:
-        raise HTTPException(status_code=404, detail="Meeting not found.")
-    return meeting
+def get_meeting(meeting_id: str, db: Session = Depends(get_db), owner_id: str = Depends(get_owner_id)) -> Meeting:
+    return _get_owned_meeting(db, meeting_id, owner_id)
 
 
 @router.delete("/{meeting_id}", status_code=204)
-def delete_meeting(meeting_id: str, db: Session = Depends(get_db)) -> None:
-    meeting = db.get(Meeting, meeting_id)
-    if meeting is None:
-        raise HTTPException(status_code=404, detail="Meeting not found.")
+def delete_meeting(meeting_id: str, db: Session = Depends(get_db), owner_id: str = Depends(get_owner_id)) -> None:
+    meeting = _get_owned_meeting(db, meeting_id, owner_id)
 
     summary = db.execute(select(Summary).where(Summary.meeting_id == meeting_id)).scalar_one_or_none()
     if summary is not None:
@@ -117,7 +127,11 @@ def delete_meeting(meeting_id: str, db: Session = Depends(get_db)) -> None:
 
 
 @router.get("/{meeting_id}/transcript", response_model=TranscriptRead)
-def get_transcript(meeting_id: str, db: Session = Depends(get_db)) -> TranscriptRead:
+def get_transcript(
+    meeting_id: str, db: Session = Depends(get_db), owner_id: str = Depends(get_owner_id)
+) -> TranscriptRead:
+    _get_owned_meeting(db, meeting_id, owner_id)
+
     transcript = db.execute(
         select(Transcript).where(Transcript.meeting_id == meeting_id)
     ).scalar_one_or_none()
@@ -143,7 +157,11 @@ def get_transcript(meeting_id: str, db: Session = Depends(get_db)) -> Transcript
 
 
 @router.get("/{meeting_id}/summary", response_model=SummaryRead)
-def get_summary(meeting_id: str, db: Session = Depends(get_db)) -> SummaryRead:
+def get_summary(
+    meeting_id: str, db: Session = Depends(get_db), owner_id: str = Depends(get_owner_id)
+) -> SummaryRead:
+    _get_owned_meeting(db, meeting_id, owner_id)
+
     summary = db.execute(
         select(Summary).where(Summary.meeting_id == meeting_id)
     ).scalar_one_or_none()

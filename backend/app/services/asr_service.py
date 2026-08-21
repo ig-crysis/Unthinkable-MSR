@@ -14,7 +14,11 @@ def _get_client() -> Groq:
     if _client is None:
         if not settings.groq_api_key:
             raise RuntimeError("GROQ_API_KEY is not set — add it to backend/.env")
-        _client = Groq(api_key=settings.groq_api_key)
+        # The SDK's own default (60s read timeout, 2 internal retries) stacks
+        # on top of this module's own retry loop below — a single slow
+        # response can silently cascade into minutes of nested retries.
+        # max_retries=0 here makes our explicit loop the only retry layer.
+        _client = Groq(api_key=settings.groq_api_key, timeout=45.0, max_retries=0)
     return _client
 
 

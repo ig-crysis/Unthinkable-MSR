@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     # Falls back to groq_api_key when unset.
     groq_api_key_diarize: str = ""
     max_upload_mb: int = 200
+    # Set true in production (served over HTTPS) so the owner-identity cookie
+    # is only ever sent over an encrypted connection.
+    cookie_secure: bool = False
 
     # A meeting is routed through the chunked pipeline if it crosses either
     # threshold. Size is always known at upload time; duration is known only

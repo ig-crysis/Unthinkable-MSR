@@ -30,6 +30,7 @@ class Meeting(Base):
     __tablename__ = "meetings"
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_new_id)
+    owner_id: Mapped[str | None] = mapped_column(String(64), index=True, default=None)
     title: Mapped[str] = mapped_column(String(255))
     filename: Mapped[str] = mapped_column(String(255))
     audio_path: Mapped[str] = mapped_column(String(500))
