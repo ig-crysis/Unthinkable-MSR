@@ -7,6 +7,12 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./app.db"
     upload_dir: str = "./uploads"
     groq_api_key: str = ""
+    # Optional second Groq account's key, used only for the diarization
+    # batch calls (the biggest source of LLM call volume for a long
+    # meeting) — splits that load onto its own separate token budget so it
+    # doesn't compete with summarization for the same account's rate limit.
+    # Falls back to groq_api_key when unset.
+    groq_api_key_diarize: str = ""
     max_upload_mb: int = 200
 
     # A meeting is routed through the chunked pipeline if it crosses either

@@ -79,10 +79,13 @@ class ChunkingError(RuntimeError):
     pass
 
 
-def split_audio(source_path: str, out_dir: Path) -> list[Path]:
+def split_audio(source_path: str, out_dir: Path) -> list[tuple[Path, float]]:
     """Splits on silence into ~chunk_target_minutes pieces (never exceeding
     chunk_max_minutes), re-encoded to mono 16kHz mp3 to keep each chunk small.
-    Raises ChunkingError if ffmpeg is unavailable or the input can't be read.
+    Returns (chunk_path, start_offset_seconds) pairs — the offset is needed to
+    shift each chunk's own 0-based Whisper segment timestamps back into
+    meeting-global time. Raises ChunkingError if ffmpeg is unavailable or the
+    input can't be read.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -99,7 +102,7 @@ def split_audio(source_path: str, out_dir: Path) -> list[Path]:
     splits = _compute_split_points(duration, silences, target_s, hard_max_s)
     boundaries = list(zip([0.0, *splits], [*splits, duration]))
 
-    chunk_paths: list[Path] = []
+    chunks: list[tuple[Path, float]] = []
     for i, (start, end) in enumerate(boundaries):
         chunk_path = out_dir / f"chunk_{i:03d}.mp3"
         result = subprocess.run(
@@ -115,6 +118,6 @@ def split_audio(source_path: str, out_dir: Path) -> list[Path]:
         )
         if result.returncode != 0 or not chunk_path.exists():
             raise ChunkingError(f"ffmpeg failed to extract chunk {i}: {result.stderr[-500:]}")
-        chunk_paths.append(chunk_path)
+        chunks.append((chunk_path, start))
 
-    return chunk_paths
+    return chunks

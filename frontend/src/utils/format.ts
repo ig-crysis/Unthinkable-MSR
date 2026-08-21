@@ -10,6 +10,14 @@ export function formatSize(bytes: number): string {
   return `${mb.toFixed(1)}MB`;
 }
 
+export function formatTimestamp(seconds: number | null): string | null {
+  if (seconds === null) return null;
+  const total = Math.max(0, Math.round(seconds));
+  const mins = Math.floor(total / 60);
+  const secs = total % 60;
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
+}
+
 export function formatRelativeDate(iso: string): string {
   const date = new Date(iso + (iso.endsWith("Z") ? "" : "Z"));
   const diffMs = Date.now() - date.getTime();

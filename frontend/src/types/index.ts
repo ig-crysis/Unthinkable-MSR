@@ -21,6 +21,12 @@ export interface Meeting {
   updated_at: string;
 }
 
+export interface TranscriptSegment {
+  speaker: string;
+  start_seconds: number | null;
+  text: string;
+}
+
 export interface Transcript {
   id: string;
   meeting_id: string;
@@ -29,6 +35,7 @@ export interface Transcript {
   provider: string;
   chunk_count: number;
   created_at: string;
+  segments: TranscriptSegment[];
 }
 
 export interface ActionItem {

@@ -10,9 +10,10 @@ from app.models.key_decision import KeyDecision
 from app.models.meeting import STATUS_PENDING_CONFIRMATION, STATUS_UPLOADED, Meeting
 from app.models.summary import Summary
 from app.models.transcript import Transcript
+from app.models.transcript_segment import TranscriptSegment
 from app.schemas.meeting import MeetingRead
 from app.schemas.summary import ActionItemRead, SummaryRead
-from app.schemas.transcript import TranscriptRead
+from app.schemas.transcript import TranscriptRead, TranscriptSegmentRead
 from app.services import chunking_service
 from app.services.processing_service import process_meeting
 from app.services.storage_service import UploadTooLarge, delete_file, is_allowed_audio, save_upload
@@ -103,21 +104,42 @@ def delete_meeting(meeting_id: str, db: Session = Depends(get_db)) -> None:
         db.execute(ActionItem.__table__.delete().where(ActionItem.summary_id == summary.id))
         db.delete(summary)
 
+    audio_path = meeting.audio_path
+
+    transcript = db.execute(select(Transcript).where(Transcript.meeting_id == meeting_id)).scalar_one_or_none()
+    if transcript is not None:
+        db.execute(TranscriptSegment.__table__.delete().where(TranscriptSegment.transcript_id == transcript.id))
     db.execute(Transcript.__table__.delete().where(Transcript.meeting_id == meeting_id))
     db.delete(meeting)
     db.commit()
 
-    delete_file(meeting.audio_path)
+    delete_file(audio_path)
 
 
 @router.get("/{meeting_id}/transcript", response_model=TranscriptRead)
-def get_transcript(meeting_id: str, db: Session = Depends(get_db)) -> Transcript:
+def get_transcript(meeting_id: str, db: Session = Depends(get_db)) -> TranscriptRead:
     transcript = db.execute(
         select(Transcript).where(Transcript.meeting_id == meeting_id)
     ).scalar_one_or_none()
     if transcript is None:
         raise HTTPException(status_code=404, detail="Transcript not available yet.")
-    return transcript
+
+    segments = db.execute(
+        select(TranscriptSegment)
+        .where(TranscriptSegment.transcript_id == transcript.id)
+        .order_by(TranscriptSegment.order_index)
+    ).scalars().all()
+
+    return TranscriptRead(
+        id=transcript.id,
+        meeting_id=transcript.meeting_id,
+        full_text=transcript.full_text,
+        language=transcript.language,
+        provider=transcript.provider,
+        chunk_count=transcript.chunk_count,
+        created_at=transcript.created_at,
+        segments=[TranscriptSegmentRead.model_validate(s) for s in segments],
+    )
 
 
 @router.get("/{meeting_id}/summary", response_model=SummaryRead)

@@ -43,5 +43,9 @@ def save_upload(file: UploadFile) -> str:
 
 
 def delete_file(path: str) -> None:
-    """Best-effort delete — a missing file is not an error here."""
-    Path(path).unlink(missing_ok=True)
+    """Best-effort delete — a missing or still-in-use (e.g. a concurrent
+    background transcription still has it open) file is not an error here."""
+    try:
+        Path(path).unlink(missing_ok=True)
+    except OSError:
+        pass
