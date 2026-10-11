@@ -108,11 +108,14 @@ def get_meeting(meeting_id: str, db: Session = Depends(get_db), owner_id: str = 
 def delete_meeting(meeting_id: str, db: Session = Depends(get_db), owner_id: str = Depends(get_owner_id)) -> None:
     meeting = _get_owned_meeting(db, meeting_id, owner_id)
 
+    # Explicit child-before-parent DELETEs: the models have no ORM
+    # relationships, so the unit of work can't order these itself, and
+    # Postgres enforces the foreign keys at each statement.
     summary = db.execute(select(Summary).where(Summary.meeting_id == meeting_id)).scalar_one_or_none()
     if summary is not None:
         db.execute(KeyDecision.__table__.delete().where(KeyDecision.summary_id == summary.id))
         db.execute(ActionItem.__table__.delete().where(ActionItem.summary_id == summary.id))
-        db.delete(summary)
+        db.execute(Summary.__table__.delete().where(Summary.id == summary.id))
 
     audio_path = meeting.audio_path
 

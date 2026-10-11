@@ -14,7 +14,7 @@
   <img src="imgs/img-3-savedsummarypage.png" alt="Saved meeting summary" width="800">
 </p>
 
-**Live:** https://unthink-meetiq.centralindia.cloudapp.azure.com
+**Live:** https://unthink-meetiq.onrender.com
 
 Upload a meeting recording, get back a transcript with speaker turns, a narrative overview, key decisions, and checkable action items — in any language the meeting was conducted in, summarized in English.
 
@@ -22,11 +22,11 @@ Built on Groq's free, low-latency hosting of Whisper (ASR) and an open-weight 12
 
 ## Stack
 
-- **Backend:** FastAPI + SQLAlchemy + SQLite
+- **Backend:** FastAPI + SQLAlchemy — SQLite locally, Postgres (Neon) in production
 - **ASR:** Groq — `whisper-large-v3`, auto-detects the spoken language (Hindi, Hinglish, and ~99 others work with no configuration)
 - **LLM:** Groq — `openai/gpt-oss-120b`, structured JSON output, always summarizes in English regardless of the meeting's language
 - **Frontend:** React + Vite + TypeScript, plain CSS — no UI framework, no router. Dependencies were kept to only what each piece strictly needs (no Alembic, no Celery/Redis, no Tailwind)
-- **Hosting:** a single always-on Azure VM (nginx + systemd), HTTPS via Let's Encrypt — see *Deployment* below
+- **Hosting:** one Docker container on Render (free tier) + Neon serverless Postgres, kept warm by an UptimeRobot health check — see *Deployment* below
 
 ## Setup
 
@@ -135,18 +135,22 @@ A single page, switched between views by local state rather than a router — on
 - **Speaker diarization is LLM-inferred, not audio-based.** Whisper's transcription API doesn't separate speakers; turns are grouped by an LLM reading conversational context (pauses, "this is X", replies), not by voice/pitch analysis — correct in testing but not as reliable as ground-truth diarization.
 - **No accounts.** Meetings are private per-browser via a cookie (see *Privacy* above), not behind a login — clearing cookies or switching browsers starts a fresh, empty identity.
 - **Groq free-tier rate limits.** Fine for a demo; heavy concurrent use would need backoff tuning beyond the current 3-chunk concurrency cap.
-- **SQLite.** Fine for a demo; the SQLAlchemy models are swappable to Postgres via `DATABASE_URL` with no code changes if this needed to scale.
+- **Free-tier hosting.** Render's free instance has 0.1 CPU / 512 MB RAM, so ffmpeg chunking of long meetings is slower than on a dedicated machine, and a meeting caught mid-processing by an instance restart is left stuck (delete and re-upload). Uploaded audio lives on ephemeral disk, which is fine since it's only read during processing.
 
 ## Deployment
 
-Live on a single Azure VM (`Standard_B1s`, Ubuntu 22.04, Central India — see `deploy/redeploy.sh`):
+Live at **https://unthink-meetiq.onrender.com**, entirely on free tiers with no card on file:
 
-- nginx serves the built frontend and reverse-proxies `/api`, `/docs`, `/redoc` to the backend on the same origin (no CORS, no cold starts)
-- the backend runs as a systemd service (`meetiq-backend`) — auto-restarts on crash, auto-starts on reboot
-- HTTPS via a free Let's Encrypt certificate with auto-renewal
-- SQLite + uploaded audio persist on the VM's disk, unchanged from local dev
+- **Render** (free web service, Singapore) builds the root [`Dockerfile`](Dockerfile): stage 1 builds the React app, stage 2 installs ffmpeg + the backend, and FastAPI serves the built frontend itself (`FRONTEND_DIST_DIR`) — frontend and API share one origin, so the ownership cookie stays first-party and there's no CORS
+- **Neon** (serverless Postgres, Singapore) holds all data via `DATABASE_URL` — Render's free disk is wiped on every restart, so SQLite can't persist there. Plain `postgresql://` URLs are routed to the psycopg 3 driver automatically, with `pool_pre_ping` to survive Neon's idle suspend
+- **UptimeRobot** pings `/api/health` every 5 minutes so the free instance never spins down — no ~60s cold start for visitors
+- HTTPS is provided by Render
 
-To push a new build after committing changes: `bash deploy/redeploy.sh` from the repo root — rebuilds the frontend, packages the backend, and deploys both with a brief service restart.
+Render env vars: `GROQ_API_KEY`, `DATABASE_URL` (Neon direct connection string, pooling off), `COOKIE_SECURE=true`.
+
+To deploy a change: push to `main` — Render auto-builds and redeploys on every commit.
+
+To run the production image locally: `docker build -t meetiq . && docker run -p 8000:8000 --env-file backend/.env meetiq` → http://localhost:8000
 
 ## Demo video
 
