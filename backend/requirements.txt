@@ -4,3 +4,4 @@ sqlalchemy
 pydantic-settings
 python-multipart
 groq
+psycopg[binary]

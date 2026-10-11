@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     # Set true in production (served over HTTPS) so the owner-identity cookie
     # is only ever sent over an encrypted connection.
     cookie_secure: bool = False
+    # Built frontend (Vite `dist/`) to serve from the API's own origin in
+    # production, so the owner cookie stays first-party. Empty = API only
+    # (local dev, where Vite's dev server serves the frontend).
+    frontend_dist_dir: str = ""
 
     # A meeting is routed through the chunked pipeline if it crosses either
     # threshold. Size is always known at upload time; duration is known only

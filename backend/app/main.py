@@ -1,11 +1,14 @@
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect, text
 
 from app.api.routes import action_items, meetings
+from app.core.config import settings
 from app.db.session import Base, engine
 
 # Without this, logger.info()/.warning() calls throughout app.services (ASR/
@@ -49,3 +52,9 @@ app.include_router(action_items.router)
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+# Mounted last: a mount at "/" matches every path, so all API routes above
+# must already be registered to take precedence over it.
+if settings.frontend_dist_dir and Path(settings.frontend_dist_dir).is_dir():
+    app.mount("/", StaticFiles(directory=settings.frontend_dist_dir, html=True), name="frontend")
